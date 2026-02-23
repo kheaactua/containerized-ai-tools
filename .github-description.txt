@@ -1,0 +1,8 @@
+# Goose in Podman - Containerized AI Agents
+Run AI coding assistants like Goose and GitHub Copilot in isolated Podman containers.
+
+This repository provides:
+- Pre-configured Dockerfile with essential dev tools
+- Shell plugins (Fish ✅, ZSH 🚧) for easy container management
+- Automatic mounting of workspace, credentials, and configs
+- Extensible framework for adding custom tools

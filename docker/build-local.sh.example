@@ -1,0 +1,38 @@
+#!/bin/bash
+# Local build customizations for work-specific tools
+# This file is gitignored and not part of the public repo
+#
+# Example: Install work-specific Python packages, CLIs, or tools
+# that shouldn't be in the public container image
+
+set -e
+
+echo "Installing work-specific tools..."
+
+# Example 1: Install a private Python package from a local directory
+# TOOLS_PATH="/workspace/my-company-tools"
+# if [ -d "$TOOLS_PATH" ]; then
+#     cp -r "$TOOLS_PATH" /tmp/my-tools
+#     cd /tmp/my-tools
+#     /opt/venv/bin/pip install --no-cache-dir .
+#     cd /tmp && rm -rf /tmp/my-tools
+#     echo "my-company-tools installed successfully"
+# fi
+
+# Example 2: Clone and install from a private Git repository
+# cd /tmp
+# git clone https://github.com/your-org/private-cli-tool.git
+# cd private-cli-tool
+# /opt/venv/bin/pip install --no-cache-dir .
+# cd /tmp && rm -rf private-cli-tool
+
+# Example 3: Install additional system packages
+# apt-get update && apt-get install -y \
+#     your-proprietary-tool \
+#     another-package
+
+# Example 4: Download and install a binary
+# curl -L https://internal.company.com/tools/mytool -o /usr/local/bin/mytool
+# chmod +x /usr/local/bin/mytool
+
+echo "Work-specific tools installed successfully"

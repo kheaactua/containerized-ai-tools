@@ -1,0 +1,5 @@
+# Optional local customizations (gitignored)
+build-local.sh
+
+# Build context - workspace tools directory
+fnv-diag-cloud-tools/

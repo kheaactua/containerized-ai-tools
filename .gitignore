@@ -1,0 +1,32 @@
+# Ignore typical build/runtime artifacts
+*.log
+*.tmp
+.DS_Store
+
+# Ignore work-specific customizations
+*-work.fish
+*-work.sh
+*-work.zsh
+container-work-*.fish
+container-work-*.zsh
+
+# Ignore local testing/development
+.envrc
+.tool-versions
+.vscode/
+.idea/
+
+# Container runtime data (if testing locally)
+tmp/
+sessions/
+
+# Build artifacts from diag-cloud-tools (if present)
+fnv-diag-cloud-tools/
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# Git
+.git/
