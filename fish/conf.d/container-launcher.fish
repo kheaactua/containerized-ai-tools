@@ -330,55 +330,20 @@ end
 # ========================================
 # Tool-Specific Wrappers
 # ========================================
-
-function goose-container --description "Run goose in container to isolate session from host"
-    # Set goose-specific environment variables
-    set -x GOOSE_DISABLE_KEYRING 1
-    set -x LANGFUSE_ENABLED false
-
-    # Pass through GOOSE_MOIM_MESSAGE_TEXT if it exists
-    if set -q GOOSE_MOIM_MESSAGE_TEXT
-        set -x GOOSE_MOIM_MESSAGE_TEXT "$GOOSE_MOIM_MESSAGE_TEXT"
-    end
-
-    __container_launcher "ai-ubuntu:latest" "goose" $argv
-    # __container_launcher "ai-ubuntu:latest" bash
-
-    # Clean up exported variables
-    set -e GOOSE_DISABLE_KEYRING
-    set -e LANGFUSE_ENABLED
-    if set -q GOOSE_MOIM_MESSAGE_TEXT
-        set -e GOOSE_MOIM_MESSAGE_TEXT
-    end
-end
-
-function copilot-container --description "Run GitHub Copilot CLI in container"
-    # Copilot uses OAuth from gh auth login, not PATs
-    # No need to set GH_TOKEN - it uses ~/.config/gh/ OAuth tokens
-
-    __container_launcher "ai-ubuntu:latest" "copilot" $argv
-    # __container_launcher "ai-ubuntu:latest" bash
-end
-
-# Backwards compatibility alias
-
-
-# Template for additional tool containers - uncomment and modify:
+# User-facing functions are now in functions/ directory for proper auto-loading:
+# - functions/goose-container.fish
+# - functions/copilot-container.fish
+#
+# Template for additional tool containers - create a new file in functions/:
 #
 # function my-tool-container --description "Run my-tool in container"
-#     __container_launcher "goose-ubuntu:latest" "my-tool" "my-tool" $argv
+#     __container_launcher "ai-ubuntu:latest" "my-tool" $argv
 # end
-
+#
 # Quick reference for the generic launcher:
-# __container_launcher IMAGE ENTRYPOINT_CMD TOOL_NAME [args...]
+# __container_launcher IMAGE TOOL_CMD [args...]
 #
 # Examples:
-# __container_launcher "goose-ubuntu:latest" "goose" "goose" session --profile dev
-# __container_launcher "goose-ubuntu:latest" "gh" "copilot" "copilot" "explain this code"
-#
-# Usage examples:
-# goose-container                 # Start interactive goose session
-# goose-container --help          # Pass arguments to goose
-# goose-container bash            # Drop into bash shell instead
-# copilot-container               # Start GitHub Copilot CLI
-# copilot-container explain       # Run copilot with "explain" command
+# __container_launcher "ai-ubuntu:latest" "goose" session --profile dev
+# __container_launcher "ai-ubuntu:latest" "copilot" "explain this code"
+
