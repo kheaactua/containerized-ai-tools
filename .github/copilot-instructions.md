@@ -1,600 +1,390 @@
-# GitHub Copilot Instructions for Goose in Podman
+# GitHub Copilot Instructions for Containerized AI Tools
 
 ## Project Overview
 
-This project provides a containerized environment for running AI coding assistants (Goose, GitHub Copilot CLI) in isolated Podman containers with automatic mounting of workspaces, git config, SSH keys, and API credentials.
+This project provides container images (Docker/Podman) for running AI coding assistants (Goose, GitHub Copilot CLI) in isolated, reproducible environments with essential development tools.
 
 **Core Goals:**
 - **Isolation**: AI agents run in containers, keeping host systems clean
-- **Security**: Credentials and keys mounted read-only; controlled access
+- **Security**: Controlled access, read-only credential mounts
 - **Reproducibility**: Same environment across machines and teams
-- **Extensibility**: Easy to add new tools and custom configurations
+- **Extensibility**: Build hooks for organization-specific tools
 
 ## Technology Stack
 
 ### Primary Technologies
-- **Podman** (NOT Docker): Daemonless container engine with rootless capabilities
-- **Fish Shell**: Primary shell plugin implementation (ZSH planned)
+- **Podman/Docker**: Container engines (Podman preferred for daemonless, rootless)
 - **Ubuntu 24.04**: Base container image
-- **Bash**: Container entrypoint and scripting
+- **Bash**: Build scripts and container entrypoint
+- **Python 3.12+**: Virtual environment for Python tools
+- **Node.js 20+**: For JavaScript-based tools
 
 ### Key Container Patterns
 - **User namespace mapping**: `--userns=keep-id` to preserve UID/GID
-- **Host networking**: `--network=host` for API access
-- **Read-only mounts**: All credentials and config files
-- **SSH agent forwarding**: Via socket mounting
-- **Unique tmpdirs**: Per-session isolation
+- **Build-time secrets**: `--secret` for git credentials during build
+- **Multi-stage builds**: Efficient layer caching
+- **Non-root user**: All tools run as regular user, not root
 
 ## Code Structure
 
 ```
-goose-in-podman-example/
-├── docker/                    # Container image definitions
-│   ├── Dockerfile            # Multi-stage build with dev tools
-│   ├── build.sh              # Build wrapper with UID/GID detection
-│   ├── build-local.sh        # Optional local customizations (gitignored)
-│   └── BUILD_HOOKS.md        # Hook system documentation
-├── fish/                      # Fish shell plugin
-│   ├── conf.d/
-│   │   └── container-launcher.fish  # Core launcher implementation
-│   └── README.md
-└── zsh/                       # Future ZSH plugin
+containerized-ai-tools/
+├── README.md                    # Main documentation
+├── LICENSE                      # MIT license
+├── .github/
+│   └── copilot-instructions.md # This file
+└── docker/                      # Container image definitions
+    ├── Dockerfile              # Multi-stage build with dev tools
+    ├── build.sh                # Build wrapper with UID/GID detection
+    ├── build-local.sh.example  # Template for customizations
+    └── BUILD_HOOKS.md          # Hook system documentation
 ```
 
 ## Code Patterns and Conventions
 
-### Fish Shell Functions
+### Dockerfile Structure
 
-#### Naming Convention
-- **Public commands**: `{tool}-container` (e.g., `goose-container`, `copilot-container`)
-- **Internal helpers**: `__container_{function}` (double underscore prefix)
-- **Hook functions**: `container-work-{category}` (e.g., `container-work-env-vars`)
-
-#### Function Template for New Tools
-```fish
-function mytool-container --description "Run mytool in container"
-    # 1. Set tool-specific environment variables
-    set -x MYTOOL_CONFIG "$HOME/.config/mytool"
-    set -x MYTOOL_CACHE_DIR "$HOME/.cache/mytool"
-
-    # 2. Call generic launcher with image, command, and args
-    __container_launcher "ai-ubuntu:latest" "mytool" $argv
-
-    # 3. Clean up exported variables
-    set -e MYTOOL_CONFIG
-    set -e MYTOOL_CACHE_DIR
-end
-```
-
-#### Internal Helper Functions
-- **`__container_print_verbose`**: Debug output (checks `CONTAINER_VERBOSE`)
-- **`__container_mount_files`**: Conditionally mount files if they exist
-- **`__container_mount_directories`**: Mount dirs and track explicit mounts
-- **`__container_mount_workdir`**: Mount CWD or git root (with deduplication)
-- **`__container_build_command`**: Assemble final podman command array
-- **`__container_launcher`**: Core launcher logic
-
-### Dockerfile Patterns
-
-#### User Creation
+#### User Creation Pattern
 ```dockerfile
 ARG LOCAL_UID=1001
 ARG LOCAL_GID=1001
 ARG LOCAL_USERNAME=developer
 
+# Create user with matching UID/GID
 RUN groupadd -g ${LOCAL_GID} ${LOCAL_USERNAME} && \
     useradd -m -u ${LOCAL_UID} -g ${LOCAL_GID} -s /bin/bash ${LOCAL_USERNAME}
 ```
 
-**Why**: Ensures container user matches host user for file ownership
-
-#### Build Hook System
+#### Python Virtual Environment Pattern
 ```dockerfile
-# Copy and run build-local.sh if it exists
-COPY build-local.sh* /tmp/
-RUN if [ -f /tmp/build-local.sh ]; then \
-        chmod +x /tmp/build-local.sh && \
-        /tmp/build-local.sh; \
+# Create venv as root, transfer ownership
+RUN python3 -m venv /opt/venv
+RUN chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /opt/venv
+
+# Install tools in venv
+USER ${LOCAL_USERNAME}
+RUN /opt/venv/bin/pip install --no-cache-dir goose-ai
+```
+
+#### Build Secrets Pattern
+```dockerfile
+# Mount secrets during build (never stored in layers)
+RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
+    if [ -f /run/secrets/gitconfig ]; then \
+        export GIT_CONFIG_GLOBAL=/run/secrets/gitconfig; \
+        git clone https://internal.example.com/private-tool.git; \
     fi
 ```
 
-**Why**: Allows local customizations without modifying tracked Dockerfile
+### Build Script Pattern
 
-#### Essential Tools for AI Agents
-Must-have packages:
-- **ripgrep** (`rg`): Fast code search - CRITICAL for AI assistants
-- **fd-find**: Fast file finder
-- **git**: Version control
-- **jq**: JSON processing
-- **python3**: Often needed by AI tools
-- **build-essential**: Compilation tools
+The `build.sh` script should:
+1. Auto-detect user's UID/GID/username
+2. Pass as build args
+3. Support optional secrets (like git credentials)
+4. Tag consistently
 
-### Build Scripts
-
-#### build.sh Pattern
 ```bash
-# Auto-detect host UID/GID
+#!/bin/bash
+set -e
+
+LOCAL_UID=$(id -u)
+LOCAL_GID=$(id -g)
+LOCAL_USERNAME=$(whoami)
+
+SECRET_ARGS=()
+if [ -f "$HOME/.gitconfig" ]; then
+    SECRET_ARGS+=(--secret "id=gitconfig,src=$HOME/.gitconfig")
+fi
+
 podman build \
-  --build-arg LOCAL_UID=$(id -u) \
-  --build-arg LOCAL_GID=$(id -g) \
-  --build-arg LOCAL_USERNAME=$(whoami) \
-  -t ai-ubuntu:latest .
+    --build-arg LOCAL_UID="$LOCAL_UID" \
+    --build-arg LOCAL_GID="$LOCAL_GID" \
+    --build-arg LOCAL_USERNAME="$LOCAL_USERNAME" \
+    "${SECRET_ARGS[@]}" \
+    -t ai-ubuntu:latest \
+    -f Dockerfile \
+    .
 ```
 
-**Why**: Automatic user namespace matching without manual configuration
+### Build Hooks Pattern
+
+Optional `build-local.sh` for organization-specific customizations:
+
+```bash
+#!/bin/bash
+set -e
+
+# Check for mounted secrets
+if [ -f /run/secrets/gitconfig ]; then
+    export GIT_CONFIG_GLOBAL=/run/secrets/gitconfig
+fi
+
+# Install private tools
+cd /tmp
+git clone https://github.com/your-org/private-tool.git
+cd private-tool
+/opt/venv/bin/pip install --no-cache-dir .
+cd /tmp && rm -rf private-tool
+```
+
+**Important**: 
+- This file should be `.gitignore`d
+- Provide `.example` template
+- Document in BUILD_HOOKS.md
 
 ## Security Requirements
 
-### CRITICAL: Read-Only Mounts
+### Critical: Build-Time Secrets
 
-**ALWAYS mount credentials and config files as read-only:**
+**NEVER** use `COPY` for credentials:
+```dockerfile
+# ❌ WRONG - Credentials stored in image layer
+COPY ~/.gitconfig /tmp/gitconfig
 
-```fish
-# CORRECT
-echo "$HOME/.ssh/config:/home/$USER/.ssh/config:ro"
-echo "$HOME/.gitconfig:/home/$USER/.gitconfig:ro"
-echo "$HOME/.netrc:/home/$USER/.netrc:ro"
-
-# WRONG - never do this
-echo "$HOME/.ssh:/home/$USER/.ssh"  # Missing :ro
+# ✅ CORRECT - Credentials only available during RUN, not stored
+RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
+    git clone https://...
 ```
 
-**Why**: Prevents AI agents from accidentally or maliciously modifying SSH keys, git credentials, or sensitive config files.
+### User Permissions
 
-### SSH Agent Forwarding
+**Always** create a non-root user:
+```dockerfile
+# ✅ CORRECT - Run as regular user
+USER ${LOCAL_USERNAME}
+RUN goose --version
 
-```fish
-# Correct pattern: mount socket read-only
--v "$SSH_AUTH_SOCK:/run/host-services/ssh-auth.sock:ro"
--e SSH_AUTH_SOCK="/run/host-services/ssh-auth.sock"
+# ❌ WRONG - Running as root is a security risk
+RUN goose --version  # (when still USER root)
 ```
 
-**Why**: Allows SSH key usage without exposing private keys to the container filesystem.
+### File Ownership
 
-### Workspace Mounts
+**Always** transfer ownership when creating resources as root:
+```dockerfile
+# Create as root
+RUN python3 -m venv /opt/venv
 
-**Workspaces are mounted read-write** because agents need to modify code:
+# ✅ Transfer ownership before switching users
+RUN chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /opt/venv
 
-```fish
-# This is intentional
--v "$git_root:$git_root"  # No :ro
+USER ${LOCAL_USERNAME}
 ```
-
-**Security considerations:**
-- Agents can modify any file in the mounted workspace
-- Container runs with user's UID/GID (not root)
-- Use git for recovery if agent makes unwanted changes
-- Consider backup strategies for critical work
-
-### User Namespace Mapping
-
-**Always use `--userns=keep-id`:**
-
-```fish
-podman run --userns=keep-id ...
-```
-
-**Why**: Preserves host UID/GID so files created in container have correct ownership on host.
-
-### Tmpdir Isolation
-
-**Each container session gets unique tmpdir:**
-
-```fish
-set -l container_tmpdir "/tmp/goose-container-"(date +%s%N | string sub -l 16)
--v "$container_tmpdir:$container_tmpdir"
--e TMPDIR="$container_tmpdir"
-```
-
-**Why**: Prevents session collisions and data leakage between concurrent containers.
 
 ## Testing Approach
 
-### Manual Testing Workflow
+### Manual Testing Required
 
-1. **Build the container:**
+1. **Build Test**
    ```bash
    cd docker
    ./build.sh
+   # Should succeed without errors
    ```
 
-2. **Test basic invocation:**
-   ```fish
-   goose-container bash
-   # Inside container, verify:
-   whoami  # Should match host username
-   id      # UID/GID should match host
-   pwd     # Should be in git root or CWD
+2. **Image Inspection**
+   ```bash
+   podman run --rm -it ai-ubuntu:latest bash
+   # Inside container:
+   id            # Check UID/GID match host
+   goose --version
+   gh copilot --version
+   which python3
+   python3 -c "import sys; print(sys.prefix)"  # Should be /opt/venv
    ```
 
-3. **Test mounts:**
-   ```fish
-   set -x CONTAINER_VERBOSE 1
-   goose-container bash
-   # Verify output shows correct mounts
+3. **Permission Test**
+   ```bash
+   # On host, in a test directory:
+   podman run --rm -it \
+     --userns=keep-id \
+     -v "$(pwd):/workspace" \
+     -w /workspace \
+     ai-ubuntu:latest bash
    
    # Inside container:
-   ls -la ~/.config/goose
-   ls -la ~/.ssh
-   cat ~/.gitconfig
-   ssh-add -l  # Should show host SSH keys
+   touch test-file.txt
+   # Exit and check on host:
+   ls -la test-file.txt  # Should be owned by your user, not root
    ```
 
-4. **Test git integration:**
-   ```fish
-   cd ~/some-repo/subdir
-   goose-container bash
-   # Inside container:
-   git rev-parse --show-toplevel  # Should work
-   git status                      # Should see real repo status
-   ```
-
-5. **Test with actual tool:**
-   ```fish
-   goose-container --version
-   goose-container session list
-   ```
-
-### Testing New Tool Wrappers
-
-When adding a new tool wrapper:
-
-1. **Verify minimal invocation:**
-   ```fish
-   mytool-container --help
-   mytool-container --version
-   ```
-
-2. **Test with verbose output:**
-   ```fish
-   set -x CONTAINER_VERBOSE 1
-   mytool-container some-command
-   ```
-
-3. **Verify environment variables:**
-   ```fish
-   mytool-container bash
-   # Inside container:
-   env | grep MYTOOL
-   ```
-
-4. **Test config file access:**
-   ```fish
-   mytool-container bash
-   # Inside container:
-   ls -la ~/.config/mytool
-   cat ~/.config/mytool/config.toml
-   ```
-
-### Dockerfile Testing
-
-After modifying Dockerfile:
-
-1. **Clean rebuild:**
+4. **Build Hook Test**
    ```bash
-   podman rmi ai-ubuntu:latest
    cd docker
+   cp build-local.sh.example build-local.sh
+   # Edit to add test customization
    ./build.sh
-   ```
-
-2. **Verify essential tools:**
-   ```fish
-   goose-container bash
-   # Inside container:
-   rg --version    # Must have ripgrep
-   fd --version    # Must have fd-find
-   git --version
-   python3 --version
-   jq --version
-   ```
-
-3. **Check user setup:**
-   ```fish
-   goose-container bash
-   # Inside container:
-   whoami          # Should match host
-   sudo echo hi    # Should work without password
+   # Verify custom tool installed
    ```
 
 ## Common Pitfalls
 
-### 1. Using Docker Instead of Podman
+### 1. UID/GID Mismatch
+**Problem**: Files created in container owned by wrong user on host
 
-❌ **Wrong:**
-```bash
-docker build -t ai-ubuntu:latest .
-alias goose="docker run ..."
-```
-
-✅ **Correct:**
-```bash
-podman build -t ai-ubuntu:latest .
-# Use podman everywhere
-```
-
-**Why**: This project is designed for Podman's rootless and daemonless features.
-
-### 2. Forgetting Read-Only on Credentials
-
-❌ **Wrong:**
-```fish
-echo "$HOME/.ssh:/home/$USER/.ssh"
-echo "$HOME/.gitconfig:/home/$USER/.gitconfig"
-```
-
-✅ **Correct:**
-```fish
-echo "$HOME/.ssh/config:/home/$USER/.ssh/config:ro"
-echo "$HOME/.gitconfig:/home/$USER/.gitconfig:ro"
-```
-
-### 3. UID/GID Mismatch
-
-**Problem**: Files created in container have wrong ownership on host.
-
-**Symptoms:**
-```bash
-ls -la
-# Shows files owned by wrong user or numeric UID
-```
-
-**Solution:**
-```bash
-cd docker
-# Rebuild with your UID/GID
-podman build \
-  --build-arg LOCAL_UID=$(id -u) \
-  --build-arg LOCAL_GID=$(id -g) \
-  --build-arg LOCAL_USERNAME=$(whoami) \
-  -t ai-ubuntu:latest .
-```
-
-Or use the `build.sh` script which does this automatically.
-
-### 4. Not Mounting Git Root
-
-**Problem**: Agent can't see `.git` directory or full repository.
-
-❌ **Wrong:**
-```fish
-# Just mounting CWD when in a subdirectory
--v "$PWD:$PWD"
-```
-
-✅ **Correct:**
-```fish
-# Auto-detect and mount git root
-set -l git_root (git rev-parse --show-toplevel 2>/dev/null)
-if test -n "$git_root"
-    -v "$git_root:$git_root"
-end
-```
-
-The `__container_mount_workdir` helper does this automatically.
-
-### 5. SSH Agent Not Available
-
-**Problem**: `ssh-add -l` fails inside container.
-
-**Check:**
-```fish
-echo $SSH_AUTH_SOCK  # Must be set on host
-```
-
-**Solution:**
-```fish
-# Start SSH agent if not running
-eval (ssh-agent -c)
-ssh-add ~/.ssh/id_ed25519
-```
-
-### 6. Hardcoding Paths
-
-❌ **Wrong:**
-```fish
--v "/home/john/.config/goose:/home/john/.config/goose"
-```
-
-✅ **Correct:**
-```fish
--v "$HOME/.config/goose:$HOME/.config/goose"
-# or
--v "$HOME/.config/goose:/home/$USER/.config/goose"
-```
-
-### 7. Not Cleaning Up Environment Variables
-
-❌ **Wrong:**
-```fish
-function mytool-container
-    set -x MYTOOL_CONFIG "$HOME/.config/mytool"
-    __container_launcher "ai-ubuntu:latest" "mytool" $argv
-    # Missing cleanup!
-end
-```
-
-✅ **Correct:**
-```fish
-function mytool-container
-    set -x MYTOOL_CONFIG "$HOME/.config/mytool"
-    __container_launcher "ai-ubuntu:latest" "mytool" $argv
-    set -e MYTOOL_CONFIG  # Clean up
-end
-```
-
-### 8. Installing Packages Without Cleanup
-
-❌ **Wrong (Dockerfile):**
+**Wrong**:
 ```dockerfile
-RUN apt-get update && apt-get install -y package1 package2
+# Hardcoded UID/GID
+RUN useradd -u 1000 -g 1000 developer
 ```
 
-✅ **Correct:**
+**Correct**:
 ```dockerfile
-RUN apt-get update && apt-get install -y \
-    package1 \
-    package2 \
-    && rm -rf /var/lib/apt/lists/*
+ARG LOCAL_UID=1001
+ARG LOCAL_GID=1001
+RUN useradd -u ${LOCAL_UID} -g ${LOCAL_GID} developer
 ```
 
-**Why**: Reduces image size by removing apt cache.
+### 2. Secrets in Layers
+**Problem**: Credentials stored in image
+
+**Wrong**:
+```dockerfile
+COPY build-local.sh /tmp/
+RUN bash /tmp/build-local.sh  # If this uses credentials, they're in the layer
+```
+
+**Correct**:
+```dockerfile
+COPY build-local.sh /tmp/
+RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
+    bash /tmp/build-local.sh
+```
+
+### 3. Python Package Location
+**Problem**: Installing packages without venv
+
+**Wrong**:
+```bash
+pip install goose-ai  # Goes to system Python
+```
+
+**Correct**:
+```bash
+/opt/venv/bin/pip install goose-ai  # Goes to venv
+# Ensure /opt/venv/bin is in PATH
+```
+
+### 4. PATH Configuration
+**Problem**: Installed tools not found
+
+**Correct**:
+```dockerfile
+ENV PATH="/opt/venv/bin:$PATH"
+```
+
+### 5. Build Context Issues
+**Problem**: COPY fails to find files
+
+```dockerfile
+# Build context is docker/, not parent directory
+# ✅ Files must be relative to docker/
+COPY build-local.sh /tmp/
+
+# ❌ This won't work from docker/ subdirectory
+COPY ../fish/some-file.fish /tmp/
+```
+
+### 6. Apt-get Best Practices
+**Wrong**:
+```dockerfile
+RUN apt-get install git
+```
+
+**Correct**:
+```dockerfile
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+### 7. Layer Caching
+Install stable dependencies early, volatile ones late:
+
+```dockerfile
+# ✅ System packages (rarely change) - early
+RUN apt-get update && apt-get install -y build-essential
+
+# ✅ AI tools (update frequently) - late  
+RUN /opt/venv/bin/pip install goose-ai
+
+# ✅ Local customizations (change often) - last
+COPY build-local.sh* /tmp/
+RUN [ -f /tmp/build-local.sh ] && bash /tmp/build-local.sh || true
+```
+
+### 8. Optional Files in Dockerfile
+**Problem**: COPY fails when optional file missing
+
+**Wrong**:
+```dockerfile
+COPY build-local.sh /tmp/  # Fails if file doesn't exist
+```
+
+**Correct**:
+```dockerfile
+COPY build-local.sh* /tmp/  # Wildcard makes it optional
+RUN if [ -f /tmp/build-local.sh ]; then bash /tmp/build-local.sh; fi
+```
 
 ## Contribution Guidelines
 
 ### Adding New Tools
 
-1. **Update Dockerfile** to install the tool
-2. **Create wrapper function** in `fish/conf.d/container-launcher.fish`:
-   ```fish
-   function newtool-container --description "Run newtool in container"
-       set -x NEWTOOL_CONFIG "$HOME/.config/newtool"
-       __container_launcher "ai-ubuntu:latest" "newtool" $argv
-       set -e NEWTOOL_CONFIG
-   end
-   ```
-3. **Test thoroughly** (see Testing Approach above)
-4. **Update documentation** (README.md, fish/README.md)
+1. **Install in virtual environment** when possible
+2. **Use official installation methods** (pip, npm, cargo)
+3. **Pin versions** for reproducibility or use latest
+4. **Update README** with tool name and purpose
+5. **Test in container** before committing
 
-### Modifying Core Launcher
+Example:
+```dockerfile
+# Add to Dockerfile
+RUN /opt/venv/bin/pip install --no-cache-dir \
+    new-ai-tool==1.2.3 \
+    another-tool
+```
 
-**⚠️ Be extremely careful** when modifying `__container_launcher` or helper functions.
+### Modifying Build Scripts
 
-**Before modifying:**
-- Understand the security implications
-- Test with multiple tools (goose, copilot, bash)
-- Verify git root detection still works
-- Check that mounts remain read-only where needed
-
-**Testing checklist:**
-- [ ] Works in git repo root
-- [ ] Works in git repo subdirectory
-- [ ] Works outside git repos
-- [ ] SSH agent forwarding still works
-- [ ] Git credentials still accessible
-- [ ] Work hooks still function
-- [ ] Verbose output is clear
-
-### Code Style
-
-#### Fish Shell
-- Use descriptive function names
-- Add `--description` to all public functions
-- Use `test` instead of `[ ]`
-- Prefer `string` functions over external tools
-- Check existence before mounting: `test -e $path`
-- Use verbose output for debugging: `__container_print_verbose`
-
-#### Bash/Shell Scripts
-- Use `#!/usr/bin/env bash` shebang
-- Set error handling: `set -euo pipefail`
-- Quote variables: `"$variable"`
-- Use `$(command)` instead of backticks
-- Add comments for non-obvious logic
-
-#### Dockerfile
-- Group related `RUN` commands
-- Always clean up apt cache: `rm -rf /var/lib/apt/lists/*`
-- Use build args for customization
-- Comment WHY, not WHAT
-- Sort package lists alphabetically for readability
+- **Preserve UID/GID detection** - critical for permissions
+- **Keep secrets pattern** - maintain security
+- **Test with and without** build-local.sh
+- **Update documentation** if behavior changes
 
 ### Documentation
 
-When making changes, update:
-- **README.md**: High-level overview and quick start
-- **fish/README.md**: Fish-specific usage and troubleshooting
-- **docker/BUILD_HOOKS.md**: If modifying build system
-- **This file**: If changing patterns or adding common pitfalls
+- **README.md**: User-facing docs (how to use)
+- **BUILD_HOOKS.md**: Developer-facing (how to extend)
+- **This file**: AI assistant guidance (patterns and conventions)
 
-### Commit Messages
+## Integration with Shell Plugins
 
-Follow conventional commits format:
+This repo provides **only the container images**. Shell integration lives in separate repos:
 
-```
-<type>(<scope>): <subject>
+- [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers) - Fish shell launcher
+- ZSH plugin - Coming soon
 
-<body>
-
-<footer>
-```
-
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation only
-- `refactor`: Code change that neither fixes a bug nor adds a feature
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
-
-**Examples:**
-```
-feat(fish): add support for custom tmpdir per tool
-
-- Allow tools to specify unique tmpdir patterns
-- Update __container_launcher to accept tmpdir_pattern param
-- Maintain backward compatibility with default behavior
-
-Closes #42
-```
-
-```
-fix(dockerfile): ensure ripgrep is installed
-
-ripgrep (rg) is critical for AI assistants to search code.
-The package was accidentally removed in cleanup.
-
-Fixes #38
-```
-
-```
-docs(security): clarify read-only mount requirements
-
-Add examples of correct and incorrect patterns for mounting
-credentials. Emphasize the security implications.
-```
+The shell plugins should:
+1. Mount credentials read-only
+2. Use `--userns=keep-id` for permission matching
+3. Detect git repositories and mount the root
+4. Pass through SSH_AUTH_SOCK for agent forwarding
+5. Support custom work-specific hooks
 
 ## AI Assistant Guidance
 
-When GitHub Copilot (or similar AI) is helping with this codebase:
+When working on this codebase:
 
-### Understand the Context
-- This is a **Podman** project, not Docker
-- Security is **critical**: credentials must be read-only
-- The launcher pattern is **generic**: changes affect all tools
-- Users may have **custom hooks**: don't break extensibility
+1. **Prioritize security**: Always use `--secret` for credentials, never `COPY`
+2. **Test permissions**: Check UID/GID matching between host and container
+3. **Respect separation**: This repo = images only, not shell integration
+4. **Document changes**: Update relevant README files
+5. **Follow patterns**: Use existing patterns for consistency
 
-### Suggest Secure Defaults
-- Always suggest `:ro` for credentials and config files
-- Use `--userns=keep-id` for user namespace mapping
-- Mount SSH agent socket, don't copy keys
-- Suggest unique tmpdirs for isolation
-
-### Respect Patterns
-- Follow the `{tool}-container` naming convention
-- Use helper functions (`__container_*`) for common operations
-- Clean up environment variables after use
-- Use verbose output for debugging
-
-### Test Suggestions
-When suggesting code changes:
-1. Consider impact on existing tools
-2. Suggest testing steps
-3. Note potential security implications
-4. Recommend documentation updates
-
-## Questions or Issues?
-
-When encountering issues:
-
-1. **Enable verbose mode**: `set -x CONTAINER_VERBOSE 1`
-2. **Check mounts**: Look for read-only flags and correct paths
-3. **Verify UID/GID**: Ensure container user matches host
-4. **Test in bash**: Use `goose-container bash` to inspect environment
-5. **Review security**: Credentials should be read-only
-6. **Check git root**: Should mount full repo, not just CWD
-
-For bugs or feature requests, open an issue with:
-- Clear description of the problem
-- Steps to reproduce
-- Output of verbose mode (if applicable)
-- Your environment (OS, Podman version, Fish version)
+When suggesting changes:
+- Explain security implications
+- Show before/after examples
+- Consider cross-platform compatibility (Linux, macOS, WSL)
+- Test that UID/GID handling still works

@@ -1,28 +1,29 @@
-# Goose in Podman - Containerized AI Agents
+# Containerized AI Tools
 
-Run AI coding assistants like [Goose](https://github.com/block/goose) and GitHub Copilot in isolated Podman containers with automatic mounting of your workspace, git config, SSH keys, and API credentials.
+Container images for running AI coding assistants like [Goose](https://github.com/block/goose) and GitHub Copilot in isolated, reproducible environments.
+
+## Overview
+
+This repository provides Docker/Podman container images with:
+- **Pre-installed AI tools**: Goose, GitHub Copilot CLI
+- **Essential dev tools**: git, ripgrep, fd, jq, python3, node, build tools
+- **Network analysis**: wireshark, tshark, tcpdump, nmap, scapy
+- **Customizable builds**: Hook system for organization-specific tools
+- **User namespace support**: Proper UID/GID mapping for file permissions
 
 ## Why Use This?
 
-- **Isolation**: AI agents run in containers, keeping your host system clean
+- **Isolation**: Keep AI agents and their dependencies separated from your host
 - **Reproducibility**: Same environment across machines and teams
-- **Security**: Control exactly what the agent can access via mounts
-- **Shareability**: Easy to share working setups with colleagues
-- **Multi-tool**: One container setup works for Goose, Copilot, and custom tools
-
-## Features
-
-- 🔒 **Secure by default**: SSH keys and credentials mounted read-only
-- 🔄 **Git integration**: Automatic git root detection and mounting
-- 🌐 **Network access**: Host networking for API calls and git operations
-- 📦 **Work hooks**: Easy customization for organization-specific mounts and env vars
-- 🐚 **Shell support**: Fish plugin (included), ZSH plugin (planned)
+- **Security**: Control access via mounts, read-only credentials
+- **Shareability**: Easy to distribute working setups
+- **Extensibility**: Build hooks for private/custom tools
 
 ## Quick Start
 
-### 1. Prerequisites
+### Prerequisites
 
-Install Podman:
+Install Podman or Docker:
 ```bash
 # Ubuntu/Debian
 sudo apt update && sudo apt install podman
@@ -32,252 +33,242 @@ sudo dnf install podman
 
 # macOS
 brew install podman
+
+# Or use Docker instead
 ```
 
-### 2. Build the Container Image
+### Build the Image
 
 ```bash
 cd docker
 ./build.sh
-# or manually: podman build -t ai-ubuntu:latest .
 ```
 
-The image includes:
-- Goose (latest stable release)
-- GitHub Copilot CLI
-- Essential dev tools (git, rg, fd, jq, python3, etc.)
-- Network analysis tools (wireshark, tshark, scapy, etc.)
+The build script automatically:
+- Detects your UID/GID for proper permissions
+- Tags as `ai-ubuntu:latest`
+- Supports optional local customizations (see Build Hooks below)
 
-### 3. Install the Shell Plugin
-
-#### Fish Shell
-
-**Option A: Fisher (recommended)**
-```fish
-fisher install /path/to/goose-in-podman-example/fish
-```
-
-**Option B: Manual**
-```fish
-# Symlink or copy the config file
-ln -s ~/goose-in-podman-example/fish/conf.d/container-launcher.fish \
-      ~/.config/fish/conf.d/container-launcher.fish
-
-# Reload fish config
-source ~/.config/fish/config.fish
-```
-
-See [fish/README.md](fish/README.md) for detailed Fish installation and usage.
-
-#### ZSH (Coming Soon)
-
-See [zsh/README.md](zsh/README.md)
-
-### 4. Run It!
-
-```fish
-# Start interactive Goose session
-goose-container
-
-# Run with arguments
-goose-container --help
-goose-container session --profile dev
-
-# GitHub Copilot
-copilot-container
-
-# Drop into bash for debugging
-goose-container bash
-```
-
-## How It Works
-
-### Container Launcher
-
-The generic `__container_launcher` function handles:
-
-1. **Environment Variables**: Automatically passes through API keys, proxy settings, SSH agent
-2. **Volume Mounts**:
-   - Config directories (`~/.config/goose`, `~/.config/github-copilot`)
-   - Git credentials (`~/.gitconfig`, `~/.netrc`, etc.) - read-only
-   - SSH config and keys - read-only
-   - Current working directory or git root
-   - Custom work-specific mounts (via hooks)
-3. **User Mapping**: `--userns=keep-id` preserves file ownership
-4. **Networking**: Host network mode for API access
-5. **Temporary Files**: Unique tmpdir per container session
-
-### Tool Wrappers
-
-Pre-configured functions for common tools:
-- `goose-container` - Run Goose
-- `copilot-container` - Run GitHub Copilot CLI
-
-
-### Work-Specific Hooks
-
-Add custom functions in your fish config to extend the launcher:
-
-```fish
-# ~/.config/fish/config.fish
-
-function container-work-env-vars
-    # Return additional env vars to pass
-    echo "JFROG_TOKEN=$JFROG_TOKEN"
-    echo "INTERNAL_API_URL=$INTERNAL_API_URL"
-end
-
-function container-work-mounts
-    # Return additional mounts (host:container[:ro])
-    echo "$HOME/work/certs:/certs:ro"
-    echo "$HOME/work/tools:/opt/tools"
-end
-```
-
-## Customization
-
-### Adding New Tools
-
-Copy the template in `fish/conf.d/container-launcher.fish`:
-
-```fish
-function my-tool-container --description "Run my-tool in container"
-    # Set tool-specific environment
-    set -x MY_TOOL_CONFIG "$HOME/.config/my-tool"
-
-    __container_launcher "ai-ubuntu:latest" "my-tool" $argv
-
-    # Clean up
-    set -e MY_TOOL_CONFIG
-end
-```
-
-### Modifying the Image
-
-Edit `docker/Dockerfile` to add packages or tools, then rebuild:
-
+**Manual build:**
 ```bash
-cd docker
-podman build -t ai-ubuntu:latest .
-```
-
-## Security Considerations
-
-- ✅ SSH keys mounted read-only (agent can use but not modify)
-- ✅ Git credentials mounted read-only
-- ✅ User namespace keeps UID/GID matching
-- ✅ Each container gets unique tmpdir (no session collisions)
-- ⚠️ Workspace directories mounted read-write (agent can modify files)
-- ⚠️ Host network mode gives full network access
-
-## Troubleshooting
-
-### SSH Agent Not Working
-
-Ensure `$SSH_AUTH_SOCK` is set:
-```fish
-echo $SSH_AUTH_SOCK
-# If empty, start ssh-agent
-eval (ssh-agent -c)
-ssh-add ~/.ssh/id_ed25519
-```
-
-### Permission Issues
-
-Check UID/GID match between host and container:
-```bash
-id -u  # Should match LOCAL_UID in Dockerfile (default: 1001)
-id -g  # Should match LOCAL_GID in Dockerfile (default: 1001)
-```
-
-If they don't match, rebuild with:
-```bash
-cd docker
 podman build \
   --build-arg LOCAL_UID=$(id -u) \
   --build-arg LOCAL_GID=$(id -g) \
   --build-arg LOCAL_USERNAME=$(whoami) \
-  -t ai-ubuntu:latest .
+  -t ai-ubuntu:latest \
+  docker/
 ```
 
-### Mount Not Working
+## What's Inside
 
-Enable verbose output to see what's being mounted:
+The container image includes:
+
+### AI Tools
+- **Goose** - Latest stable release
+- **GitHub Copilot CLI** - `gh copilot` commands
+
+### Development Tools
+- **Languages**: Python 3.12+, Node.js 20+, build-essential
+- **Search**: ripgrep, fd-find, fzf
+- **Git**: Full git with credential helpers
+- **Editors**: vim, nano
+- **Shell**: bash, zsh, fish
+- **Utilities**: curl, wget, jq, yq, tree, htop
+
+### Network Analysis
+- wireshark/tshark
+- tcpdump
+- nmap
+- scapy (Python library)
+
+## Usage
+
+### Shell Integration
+
+For convenient usage, pair this with a shell plugin that handles mounting, permissions, and environment:
+
+**Fish Shell**: [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers)
 ```fish
-set -x CONTAINER_VERBOSE 1
-goose-container bash
+fisher install kheaactua/fish-ai-containers
+goose-container      # Launch Goose in container
+copilot-container    # Launch Copilot in container
 ```
 
-### Git Not Finding Repository
+**ZSH**: Coming soon
 
-The launcher auto-detects git repositories and mounts the root. If you're not seeing your repo:
-1. Ensure you're inside a git repo: `git rev-parse --show-toplevel`
-2. Check if an explicit mount is overriding it
-3. Enable verbose mode to see mount paths
+### Manual Usage
 
-## Examples
+Run the container directly:
 
-### Interactive Goose Session
-```fish
-cd ~/my-project
-goose-container
-# Goose can see entire git repo and use your git config
+```bash
+# Interactive Goose session
+podman run --rm -it \
+  --userns=keep-id \
+  --network=host \
+  -v "$HOME/.config/goose:/home/$(whoami)/.config/goose" \
+  -v "$HOME/.gitconfig:/home/$(whoami)/.gitconfig:ro" \
+  -v "$HOME/.ssh:/home/$(whoami)/.ssh:ro" \
+  -v "$SSH_AUTH_SOCK:/run/host-services/ssh-auth.sock" \
+  -e SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock \
+  -v "$(pwd):/workspace" \
+  -w /workspace \
+  ai-ubuntu:latest \
+  goose
+
+# GitHub Copilot
+podman run --rm -it \
+  --userns=keep-id \
+  --network=host \
+  -v "$HOME/.config/gh:/home/$(whoami)/.config/gh:ro" \
+  -v "$(pwd):/workspace" \
+  -w /workspace \
+  ai-ubuntu:latest \
+  gh copilot suggest "write a unit test"
 ```
 
-### One-off Command
-```fish
-goose-container run "analyze this codebase"
+### Drop into Shell
+
+Debug or explore the container:
+```bash
+podman run --rm -it \
+  --userns=keep-id \
+  -v "$(pwd):/workspace" \
+  -w /workspace \
+  ai-ubuntu:latest \
+  bash
 ```
 
-### Debugging Container
-```fish
-# Drop into bash to inspect environment
-goose-container bash
+## Build Hooks
 
-# Inside container:
-goose@container$ pwd
-goose@container$ ls -la ~/.config/goose
-goose@container$ ssh-add -l
-goose@container$ git config --list
+Customize the image for your organization's needs using `docker/build-local.sh`:
+
+```bash
+cd docker
+cp build-local.sh.example build-local.sh
+# Edit build-local.sh to add your custom tools
+./build.sh  # Automatically runs build-local.sh if present
 ```
 
-### GitHub Copilot
-```fish
-copilot-container explain "what does this function do?"
-copilot-container suggest "write a unit test"
+**Example use cases:**
+- Install private packages from internal registries
+- Clone and install internal tools from git
+- Add organization-specific certificates
+- Install proprietary debugging tools
+
+See [docker/BUILD_HOOKS.md](docker/BUILD_HOOKS.md) for details.
+
+### Installing from Private Git Repos
+
+The build script supports mounting git credentials as a secret:
+
+```bash
+#!/bin/bash
+# docker/build-local.sh
+
+# Git credentials are available at /run/secrets/gitconfig during build
+if [ -f /run/secrets/gitconfig ]; then
+    export GIT_CONFIG_GLOBAL=/run/secrets/gitconfig
+fi
+
+cd /tmp
+git clone https://github.com/your-org/your-private-tool.git
+cd your-private-tool
+/opt/venv/bin/pip install --no-cache-dir .
+cd /tmp && rm -rf your-private-tool
+```
+
+## Security Considerations
+
+### Built-in Security
+- ✅ User namespace mapping preserves UID/GID
+- ✅ No root/daemon required (Podman)
+- ✅ Credentials can be mounted read-only
+- ✅ Isolated environment per container
+
+### Recommendations
+- Mount SSH keys and git config read-only (`:ro`)
+- Use SSH agent forwarding instead of key copying
+- Enable host networking only when needed
+- Review build-local.sh for secrets before committing
+- Use `--secret` for build-time credentials (never `COPY`)
+
+## Troubleshooting
+
+### Permission Issues
+
+**Problem**: Files created by container have wrong ownership
+
+**Solution**: Rebuild with your UID/GID:
+```bash
+cd docker
+./build.sh  # Automatically detects and uses your IDs
+```
+
+### Goose Not Found
+
+**Problem**: `goose: command not found`
+
+**Solution**: The build installs Goose to `/opt/venv/bin/`. Ensure the container's PATH includes it:
+```bash
+# Inside container
+echo $PATH
+# Should include /opt/venv/bin
+```
+
+### Network Issues
+
+**Problem**: API calls fail or git clone doesn't work
+
+**Solution**: Use `--network=host` when running:
+```bash
+podman run --network=host ...
+```
+
+### Proxy Configuration
+
+If behind a corporate proxy, set during build:
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+cd docker
+./build.sh
 ```
 
 ## Project Structure
 
 ```
-goose-in-podman-example/
-├── README.md              # This file
-├── docker/               # Container image
-│   ├── Dockerfile
-│   ├── build.sh
-│   └── patch_langfuse.py
-├── fish/                 # Fish shell plugin
-│   ├── README.md
-│   └── conf.d/
-│       └── container-launcher.fish
-└── zsh/                  # ZSH plugin (planned)
-    └── README.md
+containerized-ai-tools/
+├── README.md                    # This file
+├── LICENSE                      # MIT License
+└── docker/                      # Container image
+    ├── Dockerfile              # Multi-stage Ubuntu 24.04 image
+    ├── build.sh                # Build wrapper with UID/GID detection
+    ├── build-local.sh.example  # Template for customizations
+    ├── BUILD_HOOKS.md          # Hook system documentation
+    └── README.md               # Docker-specific docs
 ```
+
+## Related Projects
+
+### Shell Integration
+- [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers) - Fish shell plugin for launching these containers
+
+### AI Tools
+- [Goose](https://github.com/block/goose) - AI coding agent by Block
+- [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/) - AI pair programmer
+
+### Container Tech
+- [Podman](https://podman.io/) - Daemonless container engine
+- [Docker](https://www.docker.com/) - Container platform
 
 ## Contributing
 
 Contributions welcome! Areas of interest:
-- ZSH plugin implementation
-- Additional tool wrappers
-- Documentation improvements
+- Additional AI tools integration
+- Performance optimizations
 - Security enhancements
+- Documentation improvements
 
 ## License
 
-MIT License - See LICENSE file for details
-
-## Related Projects
-
-- [Goose](https://github.com/block/goose) - AI coding agent
-- [Podman](https://podman.io/) - Daemonless container engine
-- [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/) - AI pair programmer
+MIT License - See [LICENSE](LICENSE) file for details.
