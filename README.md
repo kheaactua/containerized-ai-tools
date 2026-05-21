@@ -102,7 +102,7 @@ goose-container      # Launch Goose in container
 copilot-container    # Launch Copilot in container
 ```
 
-**ZSH**: Coming soon
+**ZSH**: Might implement one day
 
 ### Manual Usage
 
