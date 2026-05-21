@@ -1,0 +1,70 @@
+# Pre-commit hooks for containerized-ai-tools
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Shell script linting and formatting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ['-x', '--severity=warning']
+        files: \.(sh|bash)$
+
+  # Shell script formatting
+  - repo: local
+    hooks:
+      - id: shfmt
+        name: Shell script formatting
+        entry: shfmt
+        args: ['-i', '4', '-ci', '-sr', '-w']
+        language: system
+        types: [shell]
+        require_serial: true
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+        # DL3008: pin apt versions (too strict for dev images)
+        # DL3009: delete apt cache (we already do this)
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Markdown linting
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        args: ['--rules', '~MD013,~MD033,~MD041']
+        # MD013: line length (too strict)
+        # MD033: inline HTML (we use it intentionally)
+        # MD041: first line heading (not always needed)
+
+  # Security checks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json

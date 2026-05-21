@@ -5,13 +5,14 @@ Container images for running AI coding assistants like [Goose](https://github.co
 ## Overview
 
 This repository provides Docker/Podman container images with:
+
 - **Pre-installed AI tools**: Goose, GitHub Copilot CLI
 - **Essential dev tools**: git, ripgrep, fd, jq, python3, node, build tools
 - **Network analysis**: wireshark, tshark, tcpdump, nmap, scapy
 - **Customizable builds**: Hook system for organization-specific tools
 - **User namespace support**: Proper UID/GID mapping for file permissions
 
-## Why Use This?
+## Why Use This
 
 - **Isolation**: Keep AI agents and their dependencies separated from your host
 - **Reproducibility**: Same environment across machines and teams
@@ -24,6 +25,7 @@ This repository provides Docker/Podman container images with:
 ### Prerequisites
 
 Install Podman or Docker:
+
 ```bash
 # Ubuntu/Debian
 sudo apt update && sudo apt install podman
@@ -45,11 +47,13 @@ cd docker
 ```
 
 The build script automatically:
+
 - Detects your UID/GID for proper permissions
 - Tags as `ai-ubuntu:latest`
 - Supports optional local customizations (see Build Hooks below)
 
 **Manual build:**
+
 ```bash
 podman build \
   --build-arg LOCAL_UID=$(id -u) \
@@ -64,10 +68,12 @@ podman build \
 The container image includes:
 
 ### AI Tools
+
 - **Goose** - Latest stable release
 - **GitHub Copilot CLI** - `gh copilot` commands
 
 ### Development Tools
+
 - **Languages**: Python 3.12+, Node.js 20+, build-essential
 - **Search**: ripgrep, fd-find, fzf
 - **Git**: Full git with credential helpers
@@ -76,6 +82,7 @@ The container image includes:
 - **Utilities**: curl, wget, jq, yq, tree, htop
 
 ### Network Analysis
+
 - wireshark/tshark
 - tcpdump
 - nmap
@@ -88,6 +95,7 @@ The container image includes:
 For convenient usage, pair this with a shell plugin that handles mounting, permissions, and environment:
 
 **Fish Shell**: [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers)
+
 ```fish
 fisher install kheaactua/fish-ai-containers
 goose-container      # Launch Goose in container
@@ -129,6 +137,7 @@ podman run --rm -it \
 ### Drop into Shell
 
 Debug or explore the container:
+
 ```bash
 podman run --rm -it \
   --userns=keep-id \
@@ -150,6 +159,7 @@ cp build-local.sh.example build-local.sh
 ```
 
 **Example use cases:**
+
 - Install private packages from internal registries
 - Clone and install internal tools from git
 - Add organization-specific certificates
@@ -180,12 +190,14 @@ cd /tmp && rm -rf your-private-tool
 ## Security Considerations
 
 ### Built-in Security
+
 - ✅ User namespace mapping preserves UID/GID
 - ✅ No root/daemon required (Podman)
 - ✅ Credentials can be mounted read-only
 - ✅ Isolated environment per container
 
 ### Recommendations
+
 - Mount SSH keys and git config read-only (`:ro`)
 - Use SSH agent forwarding instead of key copying
 - Enable host networking only when needed
@@ -199,6 +211,7 @@ cd /tmp && rm -rf your-private-tool
 **Problem**: Files created by container have wrong ownership
 
 **Solution**: Rebuild with your UID/GID:
+
 ```bash
 cd docker
 ./build.sh  # Automatically detects and uses your IDs
@@ -209,6 +222,7 @@ cd docker
 **Problem**: `goose: command not found`
 
 **Solution**: The build installs Goose to `/opt/venv/bin/`. Ensure the container's PATH includes it:
+
 ```bash
 # Inside container
 echo $PATH
@@ -220,6 +234,7 @@ echo $PATH
 **Problem**: API calls fail or git clone doesn't work
 
 **Solution**: Use `--network=host` when running:
+
 ```bash
 podman run --network=host ...
 ```
@@ -227,6 +242,7 @@ podman run --network=host ...
 ### Proxy Configuration
 
 If behind a corporate proxy, set during build:
+
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
@@ -250,24 +266,69 @@ containerized-ai-tools/
 
 ## Related Projects
 
-### Shell Integration
+**Shell Integration:**
+
 - [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers) - Fish shell plugin for launching these containers
 
-### AI Tools
+**AI Tools:**
+
 - [Goose](https://github.com/block/goose) - AI coding agent by Block
 - [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/) - AI pair programmer
 
-### Container Tech
+**Container Technology:**
+
 - [Podman](https://podman.io/) - Daemonless container engine
 - [Docker](https://www.docker.com/) - Container platform
+
+## Development
+
+### Pre-commit Hooks
+
+This repository uses pre-commit hooks for code quality:
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install hooks
+pre-commit install
+
+# Run manually on all files
+pre-commit run --all-files
+```
+
+**Hooks enabled:**
+
+- **shellcheck** - Shell script linting
+- **shfmt** - Shell script formatting
+- **hadolint** - Dockerfile linting
+- **markdownlint** - Markdown formatting
+- **gitleaks** - Secret scanning
+- **detect-secrets** - Additional secret detection
+
+### Updating Secrets Baseline
+
+If you intentionally add content that looks like a secret (example tokens, test data):
+
+```bash
+detect-secrets scan > .secrets.baseline
+git add .secrets.baseline
+```
 
 ## Contributing
 
 Contributions welcome! Areas of interest:
+
 - Additional AI tools integration
 - Performance optimizations
 - Security enhancements
 - Documentation improvements
+
+Please ensure:
+
+- Pre-commit hooks pass
+- Dockerfile builds successfully
+- Documentation is updated
 
 ## License
 
