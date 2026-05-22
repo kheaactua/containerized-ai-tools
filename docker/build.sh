@@ -19,20 +19,23 @@ fi
 
 # Build with your current UID/GID so permissions match inside the container
 podman build \
-  --build-arg LOCAL_UID="$(id -u)" \
-  --build-arg LOCAL_GID="$(id -g)" \
-  --build-arg LOCAL_USERNAME="$(whoami)" \
-  "${SECRET_ARGS[@]}" \
-  -f Dockerfile \
-  -t goose-ai:latest \
-  . \
-|| { echo "❌ Build failed!"; exit 1; }
+    --build-arg LOCAL_UID="$(id -u)" \
+    --build-arg LOCAL_GID="$(id -g)" \
+    --build-arg LOCAL_USERNAME="$(whoami)" \
+    "${SECRET_ARGS[@]}" \
+    -f Dockerfile \
+    -t ai-ubuntu:latest \
+    . ||
+    {
+        echo "❌ Build failed!"
+        exit 1
+    }
 
 echo ""
 echo "✅ Build complete!"
 echo ""
 echo "Test it with:"
-echo "  podman run -it --rm goose-ai:latest bash"
+echo "  podman run -it --rm ai-ubuntu:latest bash"
 echo ""
 echo "Or use the Fish plugin functions:"
 echo "  goose-container"

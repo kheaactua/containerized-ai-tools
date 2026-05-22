@@ -94,10 +94,10 @@ The container image includes:
 
 For convenient usage, pair this with a shell plugin that handles mounting, permissions, and environment:
 
-**Fish Shell**: [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers)
+**Fish Shell**: [fish-ai-container](https://github.com/kheaactua/fish-ai-container)
 
 ```fish
-fisher install kheaactua/fish-ai-containers
+fisher install kheaactua/fish-ai-container
 goose-container      # Launch Goose in container
 copilot-container    # Launch Copilot in container
 ```
@@ -268,7 +268,7 @@ containerized-ai-tools/
 
 **Shell Integration:**
 
-- [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers) - Fish shell plugin for launching these containers
+- [fish-ai-container](https://github.com/kheaactua/fish-ai-container) - Fish shell plugin for launching these containers
 
 **AI Tools:**
 

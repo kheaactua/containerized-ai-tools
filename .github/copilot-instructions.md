@@ -5,6 +5,7 @@
 This project provides container images (Docker/Podman) for running AI coding assistants (Goose, GitHub Copilot CLI) in isolated, reproducible environments with essential development tools.
 
 **Core Goals:**
+
 - **Isolation**: AI agents run in containers, keeping host systems clean
 - **Security**: Controlled access, read-only credential mounts
 - **Reproducibility**: Same environment across machines and teams
@@ -13,6 +14,7 @@ This project provides container images (Docker/Podman) for running AI coding ass
 ## Technology Stack
 
 ### Primary Technologies
+
 - **Podman/Docker**: Container engines (Podman preferred for daemonless, rootless)
 - **Ubuntu 24.04**: Base container image
 - **Bash**: Build scripts and container entrypoint
@@ -20,6 +22,7 @@ This project provides container images (Docker/Podman) for running AI coding ass
 - **Node.js 20+**: For JavaScript-based tools
 
 ### Key Container Patterns
+
 - **User namespace mapping**: `--userns=keep-id` to preserve UID/GID
 - **Build-time secrets**: `--secret` for git credentials during build
 - **Multi-stage builds**: Efficient layer caching
@@ -45,6 +48,7 @@ containerized-ai-tools/
 ### Dockerfile Structure
 
 #### User Creation Pattern
+
 ```dockerfile
 ARG LOCAL_UID=1001
 ARG LOCAL_GID=1001
@@ -56,6 +60,7 @@ RUN groupadd -g ${LOCAL_GID} ${LOCAL_USERNAME} && \
 ```
 
 #### Python Virtual Environment Pattern
+
 ```dockerfile
 # Create venv as root, transfer ownership
 RUN python3 -m venv /opt/venv
@@ -67,6 +72,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir goose-ai
 ```
 
 #### Build Secrets Pattern
+
 ```dockerfile
 # Mount secrets during build (never stored in layers)
 RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
@@ -79,6 +85,7 @@ RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
 ### Build Script Pattern
 
 The `build.sh` script should:
+
 1. Auto-detect user's UID/GID/username
 2. Pass as build args
 3. Support optional secrets (like git credentials)
@@ -128,7 +135,8 @@ cd private-tool
 cd /tmp && rm -rf private-tool
 ```
 
-**Important**: 
+**Important**:
+
 - This file should be `.gitignore`d
 - Provide `.example` template
 - Document in BUILD_HOOKS.md
@@ -138,6 +146,7 @@ cd /tmp && rm -rf private-tool
 ### Critical: Build-Time Secrets
 
 **NEVER** use `COPY` for credentials:
+
 ```dockerfile
 # ❌ WRONG - Credentials stored in image layer
 COPY ~/.gitconfig /tmp/gitconfig
@@ -150,6 +159,7 @@ RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
 ### User Permissions
 
 **Always** create a non-root user:
+
 ```dockerfile
 # ✅ CORRECT - Run as regular user
 USER ${LOCAL_USERNAME}
@@ -162,6 +172,7 @@ RUN goose --version  # (when still USER root)
 ### File Ownership
 
 **Always** transfer ownership when creating resources as root:
+
 ```dockerfile
 # Create as root
 RUN python3 -m venv /opt/venv
@@ -177,6 +188,7 @@ USER ${LOCAL_USERNAME}
 ### Manual Testing Required
 
 1. **Build Test**
+
    ```bash
    cd docker
    ./build.sh
@@ -184,6 +196,7 @@ USER ${LOCAL_USERNAME}
    ```
 
 2. **Image Inspection**
+
    ```bash
    podman run --rm -it ai-ubuntu:latest bash
    # Inside container:
@@ -195,6 +208,7 @@ USER ${LOCAL_USERNAME}
    ```
 
 3. **Permission Test**
+
    ```bash
    # On host, in a test directory:
    podman run --rm -it \
@@ -202,7 +216,7 @@ USER ${LOCAL_USERNAME}
      -v "$(pwd):/workspace" \
      -w /workspace \
      ai-ubuntu:latest bash
-   
+
    # Inside container:
    touch test-file.txt
    # Exit and check on host:
@@ -210,6 +224,7 @@ USER ${LOCAL_USERNAME}
    ```
 
 4. **Build Hook Test**
+
    ```bash
    cd docker
    cp build-local.sh.example build-local.sh
@@ -221,15 +236,18 @@ USER ${LOCAL_USERNAME}
 ## Common Pitfalls
 
 ### 1. UID/GID Mismatch
+
 **Problem**: Files created in container owned by wrong user on host
 
 **Wrong**:
+
 ```dockerfile
 # Hardcoded UID/GID
 RUN useradd -u 1000 -g 1000 developer
 ```
 
 **Correct**:
+
 ```dockerfile
 ARG LOCAL_UID=1001
 ARG LOCAL_GID=1001
@@ -237,15 +255,18 @@ RUN useradd -u ${LOCAL_UID} -g ${LOCAL_GID} developer
 ```
 
 ### 2. Secrets in Layers
+
 **Problem**: Credentials stored in image
 
 **Wrong**:
+
 ```dockerfile
 COPY build-local.sh /tmp/
 RUN bash /tmp/build-local.sh  # If this uses credentials, they're in the layer
 ```
 
 **Correct**:
+
 ```dockerfile
 COPY build-local.sh /tmp/
 RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
@@ -253,28 +274,34 @@ RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
 ```
 
 ### 3. Python Package Location
+
 **Problem**: Installing packages without venv
 
 **Wrong**:
+
 ```bash
 pip install goose-ai  # Goes to system Python
 ```
 
 **Correct**:
+
 ```bash
 /opt/venv/bin/pip install goose-ai  # Goes to venv
 # Ensure /opt/venv/bin is in PATH
 ```
 
 ### 4. PATH Configuration
+
 **Problem**: Installed tools not found
 
 **Correct**:
+
 ```dockerfile
 ENV PATH="/opt/venv/bin:$PATH"
 ```
 
 ### 5. Build Context Issues
+
 **Problem**: COPY fails to find files
 
 ```dockerfile
@@ -287,12 +314,15 @@ COPY ../fish/some-file.fish /tmp/
 ```
 
 ### 6. Apt-get Best Practices
+
 **Wrong**:
+
 ```dockerfile
 RUN apt-get install git
 ```
 
 **Correct**:
+
 ```dockerfile
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
@@ -300,13 +330,14 @@ RUN apt-get update && \
 ```
 
 ### 7. Layer Caching
+
 Install stable dependencies early, volatile ones late:
 
 ```dockerfile
 # ✅ System packages (rarely change) - early
 RUN apt-get update && apt-get install -y build-essential
 
-# ✅ AI tools (update frequently) - late  
+# ✅ AI tools (update frequently) - late
 RUN /opt/venv/bin/pip install goose-ai
 
 # ✅ Local customizations (change often) - last
@@ -315,14 +346,17 @@ RUN [ -f /tmp/build-local.sh ] && bash /tmp/build-local.sh || true
 ```
 
 ### 8. Optional Files in Dockerfile
+
 **Problem**: COPY fails when optional file missing
 
 **Wrong**:
+
 ```dockerfile
 COPY build-local.sh /tmp/  # Fails if file doesn't exist
 ```
 
 **Correct**:
+
 ```dockerfile
 COPY build-local.sh* /tmp/  # Wildcard makes it optional
 RUN if [ -f /tmp/build-local.sh ]; then bash /tmp/build-local.sh; fi
@@ -339,6 +373,7 @@ RUN if [ -f /tmp/build-local.sh ]; then bash /tmp/build-local.sh; fi
 5. **Test in container** before committing
 
 Example:
+
 ```dockerfile
 # Add to Dockerfile
 RUN /opt/venv/bin/pip install --no-cache-dir \
@@ -363,10 +398,11 @@ RUN /opt/venv/bin/pip install --no-cache-dir \
 
 This repo provides **only the container images**. Shell integration lives in separate repos:
 
-- [fish-ai-containers](https://github.com/kheaactua/fish-ai-containers) - Fish shell launcher
+- [fish-ai-container](<https://github.com/kheaactua/fish-ai-container>) - Fish shell launcher
 - ZSH plugin - Coming soon
 
 The shell plugins should:
+
 1. Mount credentials read-only
 2. Use `--userns=keep-id` for permission matching
 3. Detect git repositories and mount the root
@@ -384,6 +420,7 @@ When working on this codebase:
 5. **Follow patterns**: Use existing patterns for consistency
 
 When suggesting changes:
+
 - Explain security implications
 - Show before/after examples
 - Consider cross-platform compatibility (Linux, macOS, WSL)
