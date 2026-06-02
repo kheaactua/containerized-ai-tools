@@ -124,13 +124,13 @@ RUN ln -s $(which fdfind) /usr/local/bin/fd
 RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 && \
     update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-18 100
 
-# Install Homebrew (required for copilot-cli)
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
-    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.bashrc && \
-    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.profile
+# Install Homebrew (optional - currently not used but kept for future package installations)
+# RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
+#     echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.bashrc && \
+#     echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.profile
 
-# Add brew to PATH for subsequent RUN commands
-ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+# Add brew to PATH for subsequent RUN commands (uncomment if Homebrew is enabled above)
+# ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
 # Install goose (Rust-based CLI)
 # Download and install the latest stable release
