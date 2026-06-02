@@ -182,6 +182,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # This file is gitignored and won't be in the public repo
 COPY build-local.sh* /tmp/
 RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
+    --mount=type=secret,id=netrc,target=/root/.netrc \
     if [ -f /tmp/build-local.sh ]; then \
       echo "Running local build customizations..." && \
       chmod +x /tmp/build-local.sh && \

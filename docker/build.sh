@@ -17,6 +17,12 @@ if [ -f "$HOME/.gitconfig" ]; then
     SECRET_ARGS+=(--secret "id=gitconfig,src=$HOME/.gitconfig")
 fi
 
+# Prepare secret mount for netrc credentials if they exist
+if [ -f "$HOME/.netrc" ]; then
+    echo "📝 Mounting .netrc as build secret..."
+    SECRET_ARGS+=(--secret "id=netrc,src=$HOME/.netrc")
+fi
+
 # Build with your current UID/GID so permissions match inside the container
 podman build \
     --build-arg LOCAL_UID="$(id -u)" \
