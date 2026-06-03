@@ -2,6 +2,7 @@
 *.log
 *.tmp
 .DS_Store
+build-local.sh
 
 # Ignore work-specific customizations
 *-work.fish
