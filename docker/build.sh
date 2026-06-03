@@ -23,6 +23,15 @@ if [ -f "$HOME/.netrc" ]; then
     SECRET_ARGS+=(--secret "id=netrc,src=$HOME/.netrc")
 fi
 
+# Prepare secret mount for build-local.sh if it exists (resolve symlinks)
+if [ -f "build-local.sh" ] || [ -L "build-local.sh" ]; then
+    BUILD_LOCAL_PATH="$(readlink -f build-local.sh)"
+    if [ -f "$BUILD_LOCAL_PATH" ]; then
+        echo "📝 Mounting build-local.sh as build secret..."
+        SECRET_ARGS+=(--secret "id=build-local,src=$BUILD_LOCAL_PATH")
+    fi
+fi
+
 # Build with your current UID/GID so permissions match inside the container
 podman build \
     --build-arg LOCAL_UID="$(id -u)" \

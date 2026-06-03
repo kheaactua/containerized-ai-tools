@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     nano \
     poppler-utils \
+    pandoc \
     # Build tools (often needed)
     build-essential \
     cmake \
@@ -180,14 +181,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # Optional: Install additional tools via build hook
 # Place a build-local.sh script next to Dockerfile for custom installations
 # This file is gitignored and won't be in the public repo
-COPY build-local.sh* /tmp/
 RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
     --mount=type=secret,id=netrc,target=/root/.netrc \
-    if [ -f /tmp/build-local.sh ]; then \
+    --mount=type=secret,id=build-local,target=/run/secrets/build-local.sh \
+    if [ -f /run/secrets/build-local.sh ]; then \
       echo "Running local build customizations..." && \
-      chmod +x /tmp/build-local.sh && \
-      bash /tmp/build-local.sh && \
-      rm /tmp/build-local.sh; \
+      bash /run/secrets/build-local.sh; \
     else \
       echo "No local build customizations found (this is normal for public builds)"; \
     fi
