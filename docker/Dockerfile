@@ -168,7 +168,8 @@ RUN python3 -m venv /opt/venv && \
     pdfplumber \
     pymupdf \
     pdfminer.six \
-    yamllint
+    yamllint \
+    odfpy
 
 # Add venv to PATH so packages are available system-wide
 ENV PATH="/opt/venv/bin:$PATH"
