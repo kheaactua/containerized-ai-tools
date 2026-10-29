@@ -1,0 +1,5 @@
+# Keep the build context small: only bin/opencode (staged by build.sh),
+# opencode.jsonc and the Dockerfile are needed.
+*.zip
+opencode-v*/
+build-local.sh

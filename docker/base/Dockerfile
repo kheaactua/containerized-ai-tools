@@ -1,7 +1,7 @@
-# AI Tools Podman Image - Dockerfile
-# Multi-purpose container for AI coding assistants: Goose, GitHub Copilot, etc.
-# Build with: podman build -t ai-ubuntu:latest .
-# Or use build.sh which includes the necessary flags
+# AI Tools Base Image - Dockerfile
+# Provides common shell tools, Python, Node.js, and development utilities
+# for AI coding assistants (Goose, Hermes, Copilot, etc.)
+# Build with: podman build -t ai-base:latest .
 
 FROM ubuntu:24.04
 
@@ -14,17 +14,39 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install sudo first (needed before creating user)
 RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
 
-# Create user matching host (adjust UID/GID as needed)
-ARG LOCAL_UID=1001
-ARG LOCAL_GID=1001
+# Create a container user with a FIXED, constant identity.
+#
+# Portability model: the image always ships user `developer` with UID/GID 1000.
+# At *runtime* you map your (possibly different) host UID/GID onto this user with:
+#   podman run --userns=keep-id:uid=1000,gid=1000 ...
+# This decouples the image from your host UID, so a single image works on every
+# machine and bind-mounted files (workspace, ~/.gnupg, ~/.ssh) line up correctly.
+# Overriding these to match a specific host UID is possible but makes the image
+# machine-specific — prefer keep-id instead.
+ARG LOCAL_UID=1000
+ARG LOCAL_GID=1000
 ARG LOCAL_USERNAME=${LOCAL_USERNAME:-developer}
 
-RUN groupadd -g ${LOCAL_GID} ${LOCAL_USERNAME} && \
-    useradd -m -u ${LOCAL_UID} -g ${LOCAL_GID} -s /bin/bash ${LOCAL_USERNAME} && \
-    usermod -aG sudo ${LOCAL_USERNAME} && \
-    echo "${LOCAL_USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# Ubuntu 24.04's official image ships a pre-existing "ubuntu" user/group at
+# UID/GID 1000, which collides with our fixed developer:1000 identity. Rename
+# it in place (rather than deleting it) so we keep its existing homedir/skel
+# setup, then reconcile its UID/GID/name with our LOCAL_* build args.
+RUN if getent passwd ubuntu >/dev/null; then \
+        usermod -l ${LOCAL_USERNAME} -d /home/${LOCAL_USERNAME} -m ubuntu && \
+        groupmod -n ${LOCAL_USERNAME} ubuntu && \
+        usermod -u ${LOCAL_UID} ${LOCAL_USERNAME} && \
+        groupmod -g ${LOCAL_GID} ${LOCAL_USERNAME}; \
+    fi
 
-# Install essential tools that goose commonly uses
+RUN if ! getent passwd ${LOCAL_USERNAME} >/dev/null; then \
+        groupadd -g ${LOCAL_GID} ${LOCAL_USERNAME} && \
+        useradd -m -u ${LOCAL_UID} -g ${LOCAL_GID} -s /bin/bash ${LOCAL_USERNAME}; \
+    fi && \
+    usermod -aG sudo ${LOCAL_USERNAME} && \
+    echo "${LOCAL_USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    echo 'Defaults env_keep += "http_proxy https_proxy ftp_proxy no_proxy HTTP_PROXY HTTPS_PROXY FTP_PROXY NO_PROXY"' >> /etc/sudoers
+
+# Install essential tools that AI agents commonly use
 RUN apt-get update && apt-get install -y \
     # Core utilities
     curl \
@@ -34,7 +56,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     unzip \
-    # Search and find tools (CRITICAL for goose)
+    # Search and find tools (CRITICAL for AI agents)
     ripgrep \
     fd-find \
     # Text processing
@@ -51,7 +73,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     # Clang format (provides git-clang-format)
     clang-format-18 \
-    # Python (goose often needs this)
+    # Python (AI agents often need this)
     python3 \
     python3-pip \
     python3-venv \
@@ -62,7 +84,7 @@ RUN apt-get update && apt-get install -y \
     bash \
     fish \
     zsh \
-    # X11/GUI libraries (for goose keyring support)
+    # X11/GUI libraries (for keyring support)
     libxcb1 \
     # Other useful tools
     htop \
@@ -82,18 +104,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Configure npm security settings to protect against supply chain attacks (Shai-hulud)
+# Configure npm security settings to protect against supply chain attacks
 # Create global .npmrc that applies to all npm operations (build-time and runtime)
 # min-release-age=7: Only allow packages published 7+ days ago (reduces "golden hour" attack window)
 # audit=true: Enable security audits by default
 RUN echo "min-release-age=7" > /etc/npmrc && \
     echo "audit=true" >> /etc/npmrc
-
-# Install mcp-atlassian globally for goose extension (avoids npx download delay on startup)
-RUN npm install -g mcp-atlassian@2.0.0
-
-# Install GitHub Copilot CLI globally
-RUN npm install -g @github/copilot
 
 # Run npm audit to check for known vulnerabilities in installed packages
 RUN npm audit --audit-level=high || echo "Warning: npm audit found vulnerabilities"
@@ -106,6 +122,10 @@ RUN mkdir -p -m 755 /etc/apt/keyrings && \
     apt-get update && \
     apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
+
+# Install JFrog CLI (jf) - single static binary, installed system-wide
+RUN curl -fL https://install-cli.jfrog.io | sh && \
+    chmod 755 /usr/local/bin/jf
 
 # Optional: Install latest CMake from Kitware's official repository
 # Uncomment the following lines to get the newest CMake version instead of Ubuntu's default
@@ -125,37 +145,6 @@ RUN ln -s $(which fdfind) /usr/local/bin/fd
 RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 && \
     update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-18 100
 
-# Install Homebrew (optional - currently not used but kept for future package installations)
-# RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
-#     echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.bashrc && \
-#     echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/${LOCAL_USERNAME}/.profile
-
-# Add brew to PATH for subsequent RUN commands (uncomment if Homebrew is enabled above)
-# ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
-
-# Install goose (Rust-based CLI)
-# Download and install the latest stable release
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-        GOOSE_ARCH="x86_64-unknown-linux-gnu"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-        GOOSE_ARCH="aarch64-unknown-linux-gnu"; \
-    else \
-        echo "Unsupported architecture: $ARCH" && exit 1; \
-    fi && \
-    GOOSE_VERSION=$(curl -Ls https://api.github.com/repos/block/goose/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
-    curl -Ls "https://github.com/block/goose/releases/download/${GOOSE_VERSION}/goose-${GOOSE_ARCH}.tar.bz2" -o /tmp/goose.tar.bz2 && \
-    tar -xjf /tmp/goose.tar.bz2 -C /usr/local/bin && \
-    chmod +x /usr/local/bin/goose && \
-    rm /tmp/goose.tar.bz2 && \
-    echo "Installed goose ${GOOSE_VERSION} (${GOOSE_ARCH})"
-
-# Create common directories
-RUN mkdir -p /home/${LOCAL_USERNAME}/.config/goose \
-    /home/${LOCAL_USERNAME}/.ssh \
-    /run/host-services && \
-    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME}
-
 # Install Python packages not available via apt (using venv approach)
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir \
@@ -174,33 +163,38 @@ RUN python3 -m venv /opt/venv && \
 # Add venv to PATH so packages are available system-wide
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install uv (Python package manager) for building diag-dl
+# Install uv (Python package manager)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     mv /root/.local/bin/uvx /usr/local/bin/uvx
 
-# Optional: Install additional tools via build hook
-# Place a build-local.sh script next to Dockerfile for custom installations
-# This file is gitignored and won't be in the public repo
-RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
-    --mount=type=secret,id=netrc,target=/root/.netrc \
-    --mount=type=secret,id=build-local,target=/run/secrets/build-local.sh \
-    if [ -f /run/secrets/build-local.sh ]; then \
-      echo "Running local build customizations..." && \
-      bash /run/secrets/build-local.sh; \
-    else \
-      echo "No local build customizations found (this is normal for public builds)"; \
-    fi
-
 # Create common directories
+# .ssh/tmp is for ControlPath sockets (ssh ControlMaster/ControlPersist) -
+# harmless if unused, but required to exist beforehand if something tries to use it
 RUN mkdir -p \
-    /home/${LOCAL_USERNAME}/.ssh \
+    /home/${LOCAL_USERNAME}/.config \
+    /home/${LOCAL_USERNAME}/.ssh/tmp \
     /run/host-services && \
-    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME}
+    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME} && \
+    chmod 700 /home/${LOCAL_USERNAME}/.ssh && \
+    chmod 700 /home/${LOCAL_USERNAME}/.ssh/tmp
+
+# Create standard user directories (XDG Base Directory Specification)
+# These are common across all Linux applications and make mounting cleaner
+RUN mkdir -p /home/${LOCAL_USERNAME}/.config && \
+    mkdir -p /home/${LOCAL_USERNAME}/.local/bin && \
+    mkdir -p /home/${LOCAL_USERNAME}/.local/share && \
+    mkdir -p /home/${LOCAL_USERNAME}/.cache && \
+    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME}/.config && \
+    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME}/.local && \
+    chown -R ${LOCAL_USERNAME}:${LOCAL_USERNAME} /home/${LOCAL_USERNAME}/.cache
+
+# Add ~/.local/bin to PATH for user-installed binaries
+ENV PATH="/home/${LOCAL_USERNAME}/.local/bin:${PATH}"
 
 # Switch to user
 USER ${LOCAL_USERNAME}
 WORKDIR /home/${LOCAL_USERNAME}
 
 # Default command
-CMD ["goose", "session"]
+CMD ["/bin/bash"]
