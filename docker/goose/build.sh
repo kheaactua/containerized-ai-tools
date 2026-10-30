@@ -8,7 +8,7 @@ set -e
 IMAGE_NAME="ai-goose"
 IMAGE_TAG="latest"
 BASE_IMAGE="ai-base:latest"
-LOCAL_USERNAME="${USER}"
+LOCAL_USERNAME="developer"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

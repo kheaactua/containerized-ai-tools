@@ -9,6 +9,7 @@ ai-base:latest (foundation)
 ├── ai-goose:latest (Goose AI assistant)
 ├── ai-hermes:latest (Hermes AI agent)
 ├── ai-copilot:latest (GitHub Copilot CLI)
+├── ai-opencode:latest (OpenCode, Ford build)
 └── ai-fordllm-proxy:latest (Ford LLM OAuth → OpenAI-compatible proxy)
 ```
 
@@ -47,6 +48,7 @@ cd base && ./build.sh && cd ..
 cd goose && ./build.sh && cd ..
 cd hermes && ./build.sh && cd ..
 cd copilot && ./build.sh && cd ..
+cd opencode && ./build.sh && cd ..
 ```
 
 ### 3. Update Fish Functions
@@ -62,6 +64,9 @@ set -l IMAGE "ai-hermes:latest"
 
 # For Copilot
 set -l IMAGE "ai-copilot:latest"
+
+# For OpenCode
+set -l IMAGE "ai-opencode:latest"
 ```
 
 ### 4. Run
@@ -143,6 +148,10 @@ Examples:
 ├── copilot/
 │   ├── Dockerfile       # GitHub Copilot CLI
 │   └── build.sh         # Build script for copilot
+├── opencode/
+│   ├── Dockerfile       # OpenCode (Ford build) from a local binary
+│   ├── build.sh         # Build script (--binary PATH to choose the binary)
+│   └── opencode.jsonc   # Ford managed config -> /etc/opencode/opencode.jsonc
 ├── fordllm-proxy/
 │   ├── Dockerfile       # Ford LLM OAuth → OpenAI-compatible proxy
 │   └── build.sh         # Build script for the proxy (needs Ford VPN)
@@ -257,6 +266,24 @@ Add to `.gitignore` to keep it private. The build script will automatically use 
 
 ### Copilot Image Additions
 - GitHub Copilot CLI (@githubnext/github-copilot-cli)
+
+### OpenCode Image Additions (`ai-opencode`)
+- Ford build of `opencode` at `/usr/local/bin/opencode`, from a manually downloaded
+  release (https://github.com/ford-innersource/Mach1MLTools-opencode-ford/releases).
+  The binary is gitignored; `build.sh` stages it into `opencode/bin/`:
+  ```bash
+  cd opencode
+  ./build.sh                                   # default: ./opencode-v1.19.3-ford-r15-linux-amd64/opencode
+  ./build.sh --binary /path/to/newer/opencode  # use a different binary
+  ```
+- `opencode/opencode.jsonc` installed as **managed config** at
+  `/etc/opencode/opencode.jsonc` (share disabled, autoupdate off, provider
+  allowlist). It applies from any directory and overrides user config.
+- Runtime: the `opencode-container` fish function mounts the host's
+  `~/.config/opencode`, `~/.local/share/opencode` (auth + sessions DB),
+  `~/.local/state/opencode` and `~/.cache/opencode`, so the container shares host
+  login and sessions. Don't run host and container opencode against the same DB
+  at the same time.
 
 ### Ford LLM Proxy Additions (`ai-fordllm-proxy`)
 - [`fordllm_proxy`](https://github.com/ford-innersource/fordllm_proxy) cloned to

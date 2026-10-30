@@ -12,7 +12,10 @@ echo ""
 
 # Parse command line arguments
 SKIP_BASE=false
-AGENTS_TO_BUILD=("goose" "hermes" "copilot")
+# Note: "fordllm-proxy" is intentionally NOT built by default — it clones a
+# private Ford repo and requires the Ford network / VPN. Build it explicitly:
+#   ./build-all.sh --skip-base --only fordllm-proxy
+AGENTS_TO_BUILD=("goose" "hermes" "copilot" "opencode")
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -72,7 +75,7 @@ echo "✓ Build complete!"
 echo "========================================="
 echo ""
 echo "Available images:"
-podman images | grep -E "^(ai-base|ai-goose|ai-hermes|ai-copilot)" || echo "  (none found - check for errors above)"
+podman images | grep -E "(ai-base|ai-goose|ai-hermes|ai-copilot|ai-opencode|ai-fordllm-proxy)" || echo "  (none found - check for errors above)"
 echo ""
 echo "Next steps:"
 echo "  1. Test an image: podman run -it --rm ai-goose:latest"

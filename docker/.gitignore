@@ -2,5 +2,10 @@
 build-local.sh
 */build-local.sh
 
+# OpenCode binaries (downloaded release zips, extracted dirs, staged binary)
+opencode/*.zip
+opencode/opencode-v*/
+opencode/bin/
+
 # Build context - workspace tools directory
 fnv-diag-cloud-tools/

@@ -96,6 +96,10 @@ RUN apt-get update && apt-get install -y \
     wireshark \
     tcpdump \
     nmap \
+    # QNX console and AOSP diagnostics
+    picocom \
+    adb \
+    policycoreutils-python-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js and npm (provides npx)
