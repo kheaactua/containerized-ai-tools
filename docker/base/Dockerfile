@@ -71,8 +71,20 @@ RUN apt-get update && apt-get install -y \
     make \
     gcc \
     g++ \
-    # Clang format (provides git-clang-format)
+    # Debugging and profiling (native Linux): gdb for live/core debugging,
+    # valgrind (memcheck/massif) and heaptrack for heap analysis, strace and
+    # ltrace for syscall/library call tracing
+    gdb \
+    valgrind \
+    heaptrack \
+    strace \
+    ltrace \
+    # clang-format is pinned to 18 (CI runs on older Ubuntu and requires it);
+    # provides git-clang-format
     clang-format-18 \
+    # Needed by the LLVM apt install script (llvm.sh)
+    lsb-release \
+    software-properties-common \
     # Python (AI agents often need this)
     python3 \
     python3-pip \
@@ -145,9 +157,30 @@ RUN curl -fL https://install-cli.jfrog.io | sh && \
 # Create symbolic links for fd (Ubuntu ships it as fdfind)
 RUN ln -s $(which fdfind) /usr/local/bin/fd
 
-# Set up alternatives for clang-format to use version 18 as default
-RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 && \
-    update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-18 100
+# Install the latest stable LLVM/Clang toolchain from apt.llvm.org (llvm.sh adds
+# the repo and installs clang, lld, lldb, clangd). Then expose unversioned names
+# (clang, clang-tidy, ...) via update-alternatives. clang-format stays pinned to
+# Ubuntu's version 18 because CI requires it.
+RUN curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh && \
+    chmod +x /tmp/llvm.sh && \
+    LLVM_VERSION="$(sed -n 's/^CURRENT_LLVM_STABLE=\([0-9][0-9]*\).*/\1/p' /tmp/llvm.sh)" && \
+    test -n "${LLVM_VERSION}" && \
+    /tmp/llvm.sh "${LLVM_VERSION}" && \
+    apt-get install -y --no-install-recommends \
+        clang-tidy-${LLVM_VERSION} \
+        clang-tools-${LLVM_VERSION} && \
+    for tool in clang clang++ clangd clang-tidy clang-apply-replacements \
+                clang-scan-deps run-clang-tidy lld lldb lldb-server \
+                llvm-config llvm-ar llvm-ranlib llvm-symbolizer; do \
+        if [ -x "/usr/bin/${tool}-${LLVM_VERSION}" ]; then \
+            update-alternatives --install "/usr/bin/${tool}" "${tool}" \
+                "/usr/bin/${tool}-${LLVM_VERSION}" 100; \
+        fi; \
+    done && \
+    update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 && \
+    update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-18 100 && \
+    rm -rf /tmp/llvm.sh /var/lib/apt/lists/* && \
+    clang --version && clang-tidy --version && clang-format --version | grep -q 'version 18'
 
 # Install Python packages not available via apt (using venv approach)
 RUN python3 -m venv /opt/venv && \

@@ -17,7 +17,7 @@ ai-base:latest (foundation)
 - Shell tools: ripgrep, fd, jq, git, etc.
 - Python 3 + venv with common packages
 - Node.js + npm with security configs
-- Build tools: gcc, make, cmake, clang-format
+- Build tools: gcc, make, cmake, clang, clang-tidy, clang-format
 - Network analysis: tshark, tcpdump, nmap
 - User setup matching host UID/GID
 
@@ -244,7 +244,8 @@ Add to `.gitignore` to keep it private. The build script will automatically use 
 - Python 3 + pip + venv
 - Node.js + npm
 - Build tools (gcc, make, cmake)
-- clang-format + git-clang-format
+- clang + clang-tidy (latest LLVM from apt.llvm.org, unversioned names via update-alternatives)
+- clang-format 18 + git-clang-format (pinned; CI requires 18)
 
 **Network Analysis:**
 - tshark, tcpdump, nmap

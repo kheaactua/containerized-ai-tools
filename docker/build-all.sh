@@ -33,6 +33,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-base        Skip building the base image"
             echo "  --only AGENTS      Only build specified agents (comma-separated)"
             echo "                     Example: --only goose,hermes"
+            echo "                     (use 'fordllm-proxy' to build the Ford LLM proxy;"
+            echo "                      requires Ford VPN + git credentials)"
             echo "  --help             Show this help message"
             exit 0
             ;;
