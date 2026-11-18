@@ -274,17 +274,21 @@ Add to `.gitignore` to keep it private. The build script will automatically use 
   The binary is gitignored; `build.sh` stages it into `opencode/bin/`:
   ```bash
   cd opencode
-  ./build.sh                                   # default: ./opencode-v1.19.3-ford-r15-linux-amd64/opencode
+  ./build.sh                                   # default: ./opencode-v2.2.5-ford-r1-beta-1-linux-amd64/opencode
   ./build.sh --binary /path/to/newer/opencode  # use a different binary
   ```
 - `opencode/opencode.jsonc` installed as **managed config** at
-  `/etc/opencode/opencode.jsonc` (share disabled, autoupdate off, provider
-  allowlist). It applies from any directory and overrides user config.
+  `/etc/opencode/opencode.jsonc` (share disabled, updates disabled, provider
+  allowlist enforced through v2 policies). It applies from any directory and
+  overrides user config.
+- The default command is `opencode --standalone`, keeping the v2 server private
+  to the container invocation rather than using a background service.
 - Runtime: the `opencode-container` fish function mounts the host's
   `~/.config/opencode`, `~/.local/share/opencode` (auth + sessions DB),
   `~/.local/state/opencode` and `~/.cache/opencode`, so the container shares host
   login and sessions. Don't run host and container opencode against the same DB
-  at the same time.
+  at the same time. Back up these directories before the first v2 launch in case
+  you need to roll back to v1.
 
 ### Ford LLM Proxy Additions (`ai-fordllm-proxy`)
 - [`fordllm_proxy`](https://github.com/ford-innersource/fordllm_proxy) cloned to

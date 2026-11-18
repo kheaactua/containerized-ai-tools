@@ -57,5 +57,5 @@ RUN --mount=type=secret,id=gitconfig,target=/run/secrets/gitconfig \
 USER ${LOCAL_USERNAME}
 WORKDIR /home/${LOCAL_USERNAME}
 
-# Default command - start the opencode TUI
-CMD ["opencode"]
+# Keep the v2 server private to this container invocation.
+CMD ["opencode", "--standalone"]

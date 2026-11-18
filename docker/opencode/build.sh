@@ -16,7 +16,7 @@ IMAGE_TAG="latest"
 BASE_IMAGE="ai-base:latest"
 LOCAL_USERNAME="developer"
 # TODO: replace with a proper download/pinning step once sourcing is sorted out.
-OPENCODE_BINARY="${SCRIPT_DIR}/opencode-v1.19.3-ford-r15-linux-amd64/opencode"
+OPENCODE_BINARY="${SCRIPT_DIR}/opencode-v2.2.5-ford-r1-beta-1-linux-amd64/opencode"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --base IMAGE       Base image to use (default: ai-base:latest)"
             echo "  --username NAME    Username inside container (default: developer)"
             echo "  --binary PATH      opencode binary to install"
-            echo "                     (default: ./opencode-v1.19.3-ford-r15-linux-amd64/opencode)"
+            echo "                     (default: ./opencode-v2.2.5-ford-r1-beta-1-linux-amd64/opencode)"
             echo "  --help             Show this help message"
             exit 0
             ;;
