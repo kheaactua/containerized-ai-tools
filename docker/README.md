@@ -290,6 +290,59 @@ Add to `.gitignore` to keep it private. The build script will automatically use 
   at the same time. Back up these directories before the first v2 launch in case
   you need to roll back to v1.
 
+### Intrepid CAN access through host servd
+
+The base image pins `python-ics==1!26.3.9` for servd-based device access.
+Run `servd` on the Linux host and launch agent containers with `--network host`.
+A host trace of `ics.find_devices()` connected to `127.0.0.1:26741` and
+`127.0.0.1:40017`; do not assume both ports are fixed. The shared fish launcher
+already enables host networking. No Intrepid USB passthrough, privileged mode,
+or Unix socket mount is required. Serial-console passthrough is unrelated.
+Host networking reduces isolation; no LAN-facing servd listener is needed.
+
+Rebuild the base and relevant agent images, start the host service, and create a
+new container. Inside it, verify:
+
+```bash
+python -c 'import importlib.metadata as m, ics; print(m.version("python-ics")); print(ics.find_devices())'
+```
+
+The ValueCAN should appear. All separate tool environments must also use
+`python-ics>=1!26.3.9`, not older direct-USB releases.
+
+Private `tat-cli` is installed into the shared base for all agent images by
+default. Run on the host with Ford network access:
+
+```bash
+cd /home/matt/workspace/docker/containerized-ai-tools/docker
+./build-all.sh
+```
+
+The Dockerfile and `base/build.sh` default `TAT_INDEX_URL` to
+`https://jfrog.ford.com/artifactory/api/pypi/test-pypi-prod-local/simple`. TAT and the pinned
+python-ics are resolved together in `/opt/venv`; incompatible TAT requirements
+fail the build rather than downgrading python-ics. The build also runs `pip check`
+and `tat --help`. Override `TAT_INDEX_URL` to use another index, or explicitly set
+it empty to skip TAT: `TAT_INDEX_URL= ./build-all.sh`. Direct Podman builds can
+skip it with `--build-arg TAT_INDEX_URL=`.
+The index uses HTTPS with certificate verification. Configure a
+`machine jfrog.ford.com` entry in your host `~/.netrc` as described in
+[Ford's PyPI configuration](https://ford.atlassian.net/wiki/spaces/fnv/pages/334562280/PyPi+Configuration).
+`base/build.sh` passes that file as a build-only secret; it is not copied into
+image layers. Direct Podman builds need `--secret id=netrc,src="$HOME/.netrc"`.
+Never put credentials in the build argument or URL.
+
+Reload the fish launcher on the host and start a fresh agent container. Run the
+enumeration command above, then a read-only TAT check such as:
+
+```bash
+timeout 15s tat pdc ignition wait
+```
+
+A timeout can mean ignition never reached the requested state; it is not proof
+of a CAN connection. Confirm enumeration and inspect TAT output for device
+initialization errors. This command observes ignition rather than changing it.
+
 ### Ford LLM Proxy Additions (`ai-fordllm-proxy`)
 - [`fordllm_proxy`](https://github.com/ford-innersource/fordllm_proxy) cloned to
   `/opt/fordllm_proxy`, dependencies installed via `uv sync`

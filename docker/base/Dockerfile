@@ -185,10 +185,12 @@ RUN curl -fL https://install-cli.jfrog.io | sh && \
 RUN ln -s $(which fdfind) /usr/local/bin/fd
 
 # Install Python packages not available via apt (using venv approach)
+ARG PYTHON_ICS_VERSION=1!26.3.9
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir \
     pyshark \
     python-can \
+    "python-ics==${PYTHON_ICS_VERSION}" \
     cantools \
     pyyaml \
     jinja2 \
@@ -198,6 +200,19 @@ RUN python3 -m venv /opt/venv && \
     pdfminer.six \
     yamllint \
     odfpy
+
+# Authenticate to Ford JFrog using a build-only netrc secret.
+ARG TAT_INDEX_URL=https://jfrog.ford.com/artifactory/api/pypi/test-pypi-prod-local/simple
+RUN --mount=type=secret,id=netrc,target=/run/secrets/netrc \
+    if [ -n "${TAT_INDEX_URL}" ]; then \
+        NETRC=/run/secrets/netrc /opt/venv/bin/pip install --no-cache-dir --no-input \
+            --index-url "${TAT_INDEX_URL}" \
+            tat-cli "python-ics==${PYTHON_ICS_VERSION}" && \
+        /opt/venv/bin/pip check && \
+        /opt/venv/bin/tat --help; \
+    else \
+        echo "Skipping private tat-cli install (TAT_INDEX_URL is empty)"; \
+    fi
 
 # Add venv to PATH so packages are available system-wide
 ENV PATH="/opt/venv/bin:$PATH"
